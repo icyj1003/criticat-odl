@@ -3,26 +3,25 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from typing import Callable
-
-
-def accuracy(preds, labels):
-    predicted = torch.argmax(preds, dim=1)
-    correct = (predicted == labels).sum().item()
-    accuracy = correct / len(labels)
-    return accuracy
+from typing import *
+from metrics import accuracy
 
 
 class Trainer:
+    """Trainer
+    User for offline-batch training settings
+    """
+
     def __init__(
         self,
         model: nn.Module,
-        epochs:int,
+        epochs: int,
         optimizer: Callable,
         criterion: Callable,
         train_iter: DataLoader,
         eval_iter: DataLoader = None,
         device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        wandb_settings: dict = None,
     ) -> None:
         self.model = model.to(device)
         self.epochs = epochs
@@ -31,6 +30,7 @@ class Trainer:
         self.device = device
         self.train_iter = train_iter
         self.eval_iter = eval_iter
+        self.wandb_settings = wandb_settings
 
     def train(self, epoch, iterator):
         epoch_loss = 0
@@ -81,9 +81,21 @@ class Trainer:
             train_loss, train_acc = self.train(epoch, self.train_iter)
             if self.eval_iter:
                 eval_loss, eval_acc = self.eval(epoch, self.eval_iter)
+
+                # logs to stdout
+                if not self.wandb_settings:
+                    print(
+                        f"Epoch: {epoch+1:03} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc:.2f}% | Eval Loss: {eval_loss:.3f} | Eval Acc: {eval_acc:.2f}%"
+                    )
+
+                # use wandb
+                else:
+                    pass
+            # logs to stdout
+            if not self.wandb_settings:
                 print(
-                    f"Epoch: {epoch+1:03} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}% | Eval Loss: {eval_loss:.3f} | Eval Acc: {eval_acc*100:.2f}%"
+                    f"Epoch: {epoch+1:03} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc:.2f}%"
                 )
-            print(
-                    f"Epoch: {epoch+1:03} | Train Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%"
-                )
+            # use wandb
+            else:
+                pass

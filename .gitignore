@@ -162,4 +162,5 @@ cython_debug/
 # project
 *public_test_final_images/
 *public_train_final_images/
-*/wandb/
+*wandb/
+data/
