@@ -1,9 +1,13 @@
+import datetime
 import json
+from typing import *
 
 import torch
 from tqdm.auto import tqdm
 
 from preprocess import VietnameseTextCleaner
+from transforms import TextTransform
+from vocabulary import Vocabulary
 
 
 def to_number(object):
@@ -36,7 +40,11 @@ def LDtoDL(l):
     result = {}
     for d in l:
         for k, v in d.items():
-            result[k] = result.get(k, []) + [v]
+            t = result.get(k)
+            if t is not None:
+                result[k] = torch.cat([t, v])
+            else:
+                result[k] = v
     return result
 
 
@@ -50,11 +58,7 @@ def DLtoLD(d):
     return result
 
 
-def generate_toy_dataset(length: int = 100):
-    pass
-
-
-def read_config(filename):
+def read_config(filename) -> dict:
     with open(filename, "r") as file:
         data = json.load(file)
 
@@ -84,17 +88,6 @@ def train_one(model, optimizer, criterion, inputs, targets):
 
 
 def eval_one(model, criterion, inputs, targets):
-    """AI is creating summary for eval_one
-
-    Args:
-        model ([type]): [description]
-        criterion ([type]): [description]
-        inputs ([type]): [description]
-        targets ([type]): [description]
-
-    Returns:
-        [type]: [description]
-    """
     # set the PyTorch model to evaluating mode
     model.eval()
 
@@ -108,14 +101,56 @@ def eval_one(model, criterion, inputs, targets):
     return loss, outputs
 
 
-def sum(a, b):
-    """AI is creating summary for sum
+def handling_text(
+    texts: Iterable, vocab: Vocabulary, train: bool = True
+) -> torch.Tensor:
+    tokenizer = lambda x: [_.split() for _ in x]
+    text_transform = TextTransform(max_length=20)
+    texts = tokenizer(texts)
+    if train:
+        # update token to vocab
+        vocab.append_from_iterator(texts)
+    # token -> index -> padding -> tensor -> batch
+    texts = torch.stack([text_transform(vocab.get_idxs(tokens)) for tokens in texts])
+    return texts
 
-    Args:
-        a ([type]): [description]
-        b ([type]): [description]
 
-    Returns:
-        [type]: [description]
-    """
-    return a + b
+def handling_username(
+    usernames: Iterable, LUT: Vocabulary, train: bool = True
+) -> torch.Tensor:
+    if train:
+        LUT.append_tokens(usernames)
+    # username -> index
+    return torch.stack([torch.tensor(LUT[user]) for user in usernames])
+
+
+def handling_metadata(
+    num_like_post: Iterable,
+    num_comment_post: Iterable,
+    num_share_post: Iterable,
+    raw_length: Iterable,
+    timestamp_post: Iterable,
+):
+    hours = torch.tensor(
+        [datetime.datetime.fromtimestamp(x.item()).hour for x in timestamp_post],
+        dtype=torch.float,
+    )
+    weekdays = torch.tensor(
+        [datetime.datetime.fromtimestamp(x.item()).weekday() for x in timestamp_post],
+        dtype=torch.float,
+    )
+
+    return (
+        torch.stack(
+            [
+                num_like_post,
+                num_comment_post,
+                num_share_post,
+                raw_length,
+                weekdays,
+                hours,
+            ],
+            dim=1,
+        )
+        + 1
+    ).log()

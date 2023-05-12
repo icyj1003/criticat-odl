@@ -1,15 +1,17 @@
-from tqdm.auto import tqdm
+from typing import *
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from typing import *
+from tqdm.auto import tqdm
+
 from metrics import accuracy
 
 
 class Trainer:
     """Trainer
-    User for offline-batch training settings
+    Use for offline-batch training settings
     """
 
     def __init__(
