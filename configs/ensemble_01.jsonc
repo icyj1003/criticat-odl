@@ -1,0 +1,51 @@
+{
+  // Define model name here
+  "name": "default",
+
+  // Define model type here
+  "type": "text",
+
+  // Buffer type: none, full, classes
+  "buffer": "fixed",
+  "buffer_size": 64,
+
+  // Define learning rate here
+  "learning_rate": 0.0001,
+
+  // Define epoch here
+  "num_epochs": 50,
+
+  // Define train_batch_size here
+  "train_batch_size": 64,
+
+  // Define eval_batch_size here
+  "eval_batch_size": 64,
+
+  // Define test_batch_size here
+  "test_batch_size": 64,
+
+  // Text model
+  "text_model": {
+    "architecture": "bilstm",
+    "feature_extractor": "train",
+    "embedding_dim": 100,
+    "hidden_dim": 128,
+    "use_pretrain_embedding": false,
+    "max_features": 100000,
+    "dropout_rate": 0.5
+  },
+  // Image model
+  "image_model": {
+    "architecture": "resnet18"
+  },
+  // Metadata model
+  "metadata_model": {
+    "hidden_size": 1024
+  },
+  // User model
+  "user_model": {
+    "embedding_dim": 100,
+    "max_user": 100000,
+    "dropout_rate": 0.3
+  }
+}

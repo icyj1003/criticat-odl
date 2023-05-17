@@ -1,10 +1,14 @@
 import datetime
 import json
+import os
+from pathlib import Path
 from typing import *
 
 import torch
-from tqdm.auto import tqdm
+from sklearn.metrics import accuracy_score
 
+from metrics import MeanMetric
+from module import *
 from preprocess import VietnameseTextCleaner
 from transforms import TextTransform
 from vocabulary import Vocabulary
@@ -36,69 +40,110 @@ def dict_handler(
     return data
 
 
-def LDtoDL(l):
-    result = {}
-    for d in l:
-        for k, v in d.items():
-            t = result.get(k)
-            if t is not None:
-                result[k] = torch.cat([t, v])
-            else:
-                result[k] = v
-    return result
-
-
-def DLtoLD(d):
-    if not d:
-        return []
-    result = [{} for i in range(max(map(len, d.values())))]
-    for k, seq in d.items():
-        for oneDict, oneValue in zip(result, seq):
-            oneDict[k] = oneValue
-    return result
-
-
 def read_config(filename) -> dict:
-    with open(filename, "r") as file:
-        data = json.load(file)
+    jsondata = ""
+    with open(filename, "r") as jsonfile:
+        for line in jsonfile:
+            jsondata += line.split("//")[0]
 
-    return data
+    objec = json.loads(jsondata)
+
+    return objec
 
 
-def train_one(model, optimizer, criterion, inputs, targets):
-    # set the PyTorch model to training mode
+def repare_input(configs, batch, device):
+    if configs["type"] == "ensemble" or configs["type"] == "text":
+        vectors = batch["texts"].to(device)
+
+    if configs["type"] == "ensemble" or configs["type"] == "image":
+        images = batch["images"].to(device, dtype=torch.float)
+
+    if configs["type"] == "ensemble" or configs["type"] == "metadata":
+        metadata = batch["metadata"].to(device)
+
+    if configs["type"] == "ensemble" or configs["type"] == "user_name":
+        user_name = batch["user_name"].to(device)
+    labels = batch["labels"].to(device)
+
+    if configs["type"] == "ensemble":
+        return (vectors, images, user_name, metadata), labels
+    elif configs["type"] == "text":
+        return (vectors,), labels
+    elif configs["type"] == "image":
+        return (images,), labels
+    elif configs["type"] == "metadata":
+        return (metadata,), labels
+    elif configs["type"] == "user_name":
+        return (user_name,), labels
+
+
+def train_epoch(model, optimizer, criterion, loader, device, configs):
+    # default values
+    y_true = []
+    y_pred = []
+    epoch_loss = MeanMetric()
+
+    # training mode
     model.train()
+    for batch in loader:
+        inputs, labels = repare_input(configs, batch, device)
 
-    # zero-out the gradients
-    optimizer.zero_grad()
+        # zero-out the gradients
+        optimizer.zero_grad()
 
-    # forward pass
-    outputs = model(*inputs)
-
-    # calculate the loss
-    loss = criterion(outputs, targets)
-
-    # backward propagation
-    loss.backward()
-
-    # optimization step
-    optimizer.step()
-
-    return loss, outputs
-
-
-def eval_one(model, criterion, inputs, targets):
-    # set the PyTorch model to evaluating mode
-    model.eval()
-
-    with torch.no_grad():
         # forward pass
         outputs = model(*inputs)
 
-    # calculate the loss
-    loss = criterion(outputs, targets)
+        # calculate the loss
+        loss = criterion(outputs, labels)
 
-    return loss, outputs
+        # backward propagation
+        loss.backward()
+
+        # optimization step
+        optimizer.step()
+
+        y_true.append(labels.cpu())
+        y_pred.append(torch.argmax(outputs, dim=1).cpu())
+
+        epoch_loss.update(loss.item())
+
+    y_true = torch.cat(y_true)
+    y_pred = torch.cat(y_pred)
+    acc = accuracy_score(y_true, y_pred)
+
+    return epoch_loss.result(), acc, y_true, y_pred
+
+
+def eval_epoch(model, criterion, loader, device, configs):
+    # default values
+    y_true = []
+    y_pred = []
+    epoch_loss = MeanMetric()
+
+    # eval mode
+    model.eval()
+
+    with torch.no_grad():
+        for batch in loader:
+            inputs, labels = repare_input(configs, batch, device)
+
+            # forward pass
+            outputs = model(*inputs)
+
+            # calculate the loss
+            loss = criterion(outputs, labels)
+
+            y_true.append(labels.cpu())
+            y_pred.append(torch.argmax(outputs, dim=1).cpu())
+
+            epoch_loss.update(loss.item())
+
+    y_true = torch.cat(y_true)
+    y_pred = torch.cat(y_pred)
+    acc = accuracy_score(y_true, y_pred)
+
+    return epoch_loss.result(), acc, y_true, y_pred
 
 
 def handling_text(
@@ -154,3 +199,99 @@ def handling_metadata(
         )
         + 1
     ).log()
+
+
+def load_model_from_config(configs):
+    # text model
+    if configs["type"] == "ensemble" or configs["type"] == "text":
+        if configs["text_model"]["architecture"] == "lstm":
+            text_model = LSTMClassifier(
+                embedding_dim=configs["text_model"].get("embedding_dim"),
+                hidden_dim=configs["text_model"].get("hidden_dim"),
+                vocab_size=configs["text_model"].get("max_features"),
+                dropout_rate=configs["text_model"].get("dropout_rate"),
+                use_pretrain_embedding=configs["text_model"].get(
+                    "use_pretrain_embedding"
+                ),
+            )
+        elif configs["text_model"]["architecture"] == "gru":
+            text_model = GRUClassifier(
+                embedding_dim=configs["text_model"].get("embedding_dim"),
+                hidden_dim=configs["text_model"].get("hidden_dim"),
+                vocab_size=configs["text_model"].get("max_features"),
+                dropout_rate=configs["text_model"].get("dropout_rate"),
+                use_pretrain_embedding=configs["text_model"].get(
+                    "use_pretrain_embedding"
+                ),
+            )
+        elif configs["text_model"]["architecture"] == "bilstm":
+            text_model = LSTMClassifier(
+                embedding_dim=configs["text_model"].get("embedding_dim"),
+                hidden_dim=configs["text_model"].get("hidden_dim"),
+                vocab_size=configs["text_model"].get("max_features"),
+                dropout_rate=configs["text_model"].get("dropout_rate"),
+                bidirectional=True,
+                use_pretrain_embedding=configs["text_model"].get(
+                    "use_pretrain_embedding"
+                ),
+            )
+        elif configs["text_model"]["architecture"] == "bigru":
+            text_model = GRUClassifier(
+                embedding_dim=configs["text_model"].get("embedding_dim"),
+                hidden_dim=configs["text_model"].get("hidden_dim"),
+                vocab_size=configs["text_model"].get("max_features"),
+                dropout_rate=configs["text_model"].get("dropout_rate"),
+                bidirectional=True,
+                use_pretrain_embedding=configs["text_model"].get(
+                    "use_pretrain_embedding"
+                ),
+            )
+        else:
+            raise Exception("Unknown text model architecture!")
+    if configs["type"] == "ensemble" or configs["type"] == "image":
+        if configs["image_model"]["architecture"] == "resnet18":
+            image_model = Resnet18()
+        elif configs["image_model"]["architecture"] == "resnet34":
+            image_model = Resnet34()
+        else:
+            raise Exception("Unknown image model architecture!")
+
+    if configs["type"] == "ensemble" or configs["type"] == "metadata":
+        metadata_model = Metadata(
+            input_size=6, hidden_size=configs["metadata_model"].get("hidden_size")
+        )
+    if configs["type"] == "ensemble" or configs["type"] == "user_name":
+        user_model = UserEmbedding(
+            max_num_user=configs["user_model"].get("max_user"),
+            embedding_dim=configs["user_model"].get("embedding_dim"),
+            dropout_rate=configs["user_model"].get("dropout_rate"),
+        )
+    if configs["type"] == "ensemble":
+        model = Ensemble(
+            text_model=text_model,
+            image_model=image_model,
+            user_model=user_model,
+            metadata_model=metadata_model,
+        )
+        return model
+    elif configs["type"] == "text":
+        return text_model
+    elif configs["type"] == "image":
+        return image_model
+    elif configs["type"] == "metadata":
+        return metadata_model
+    elif configs["type"] == "user_name":
+        return user_model
+
+
+def save_object(object, dir, filename=None, mode: Literal["pt", "jsonc"] = "pt"):
+    # ensure dir exists
+    Path(dir).mkdir(parents=True, exist_ok=True)
+
+    # save object
+    if mode == "pt":
+        torch.save(object, os.path.join(dir, f"{filename}.pt"))
+    elif mode == "jsonc":
+        assert type(object) is dict, "type must be dict when saving as jsonc"
+        with open(os.path.join(dir, f"{filename}.jsonc"), "w") as outfile:
+            json.dump(object, outfile)

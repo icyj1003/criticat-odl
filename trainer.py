@@ -52,7 +52,7 @@ class Trainer:
             loss.backward()
             self.optimizer.step()
 
-            epoch_loss += loss.item()
+            epoch_loss += loss.item() 
             epoch_acc += acc
 
         return epoch_loss / len(iterator), epoch_acc / len(iterator)

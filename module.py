@@ -7,17 +7,36 @@ from torchvision import models
 #! === Text model ===
 class LSTMClassifier(nn.Module):
     def __init__(
-        self, vocab_size, embedding_dim, hidden_dim, num_classes=2, dropout_rate=0.5
+        self,
+        embedding_dim,
+        hidden_dim,
+        num_classes=2,
+        vocab_size=None,
+        dropout_rate=0.5,
+        bidirectional=False,
+        use_pretrain_embedding=False,
     ):
         super(LSTMClassifier, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=1, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, num_classes)
+        self.use_pretrain_embedding = use_pretrain_embedding
+        self.bidirectional = bidirectional
+        if not self.use_pretrain_embedding:
+            self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(
+            embedding_dim,
+            hidden_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+        )
+        self.fc = nn.Linear(
+            hidden_dim * 2 if self.bidirectional else hidden_dim, num_classes
+        )
         self.dropout = torch.nn.Dropout(p=dropout_rate)
 
     def forward(self, inputs):
-        embedded = self.embedding(inputs)
-        out, _ = self.lstm(embedded)
+        if not self.use_pretrain_embedding:
+            inputs = self.embedding(inputs)
+        out, _ = self.lstm(inputs)
         out = self.dropout(out[:, -1, :])
         out = self.fc(out)
         return F.softmax(out, dim=1)
@@ -25,17 +44,36 @@ class LSTMClassifier(nn.Module):
 
 class GRUClassifier(nn.Module):
     def __init__(
-        self, vocab_size, embedding_dim, hidden_dim, num_classes=2, dropout_rate=0.5
+        self,
+        embedding_dim,
+        hidden_dim,
+        num_classes=2,
+        vocab_size=None,
+        dropout_rate=0.5,
+        bidirectional=False,
+        use_pretrain_embedding=False,
     ):
         super(GRUClassifier, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.gru = nn.GRU(embedding_dim, hidden_dim, num_layers=1, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, num_classes)
+        self.use_pretrain_embedding = use_pretrain_embedding
+        self.bidirectional = bidirectional
+        if not self.use_pretrain_embedding:
+            self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.GRU(
+            embedding_dim,
+            hidden_dim,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=self.bidirectional,
+        )
+        self.fc = nn.Linear(
+            hidden_dim * 2 if self.bidirectional else hidden_dim, num_classes
+        )
         self.dropout = torch.nn.Dropout(p=dropout_rate)
 
     def forward(self, inputs):
-        embedded = self.embedding(inputs)
-        out, _ = self.gru(embedded)
+        if not self.use_pretrain_embedding:
+            inputs = self.embedding(inputs)
+        out, _ = self.lstm(inputs)
         out = self.dropout(out[:, -1, :])
         out = self.fc(out)
         return F.softmax(out, dim=1)
@@ -62,14 +100,24 @@ class Resnet34(nn.Module):
     def forward(self, inputs):
         out = self.model(inputs)
         return F.softmax(out, dim=1)
+    
+class Vgg16(nn.Module):
+    def __init__(self, num_classes: int = 2):
+        super(Vgg16, self).__init__()
+        self.model = models.vgg16(weights="VGG16_Weights.DEFAULT")
+        self.model.classifier[-1] = nn.Linear(in_features=4096, out_features=num_classes, bias=True)
+
+    def forward(self, inputs):
+        out = self.model(inputs)
+        return F.softmax(out, dim=1)
 
 
 #! === Metadata model ===
 class Metadata(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, dropout_rate=0.5):
+    def __init__(self, input_size, hidden_size, num_classes=2, dropout_rate=0.5):
         super(Metadata, self).__init__()
         self.fc1 = torch.nn.Linear(input_size, hidden_size)
-        self.fc2 = torch.nn.Linear(hidden_size, output_size)
+        self.fc2 = torch.nn.Linear(hidden_size, num_classes)
         self.dropout = torch.nn.Dropout(p=dropout_rate)
 
     def forward(self, x):
@@ -124,3 +172,4 @@ class Ensemble(nn.Module):
         ) / self.weights.sum()
 
         return out
+
