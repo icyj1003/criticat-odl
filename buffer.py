@@ -1,119 +1,81 @@
 import copy
 import os
-from random import shuffle
+from collections import Counter
 from typing import *
 
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
-from cusdataset import MyDataset
+from customdataset import TestingDataset
 from utils import *
 
 
-class FullBuffer:
-    def __init__(self) -> None:
-        self.buffer = MyDataset({})
+class Buffer:
+    def __init__(
+        self,
+        data: List[dict] = [],
+        buffer_type: Literal["full", "fixed", "classes"] = "full",
+        max_capacity: int = 1024,
+        num_classes: int = 2,
+    ) -> None:
+        self.buffer = TestingDataset(data)
+        self.type = buffer_type
+        self.num_classes = num_classes
+        self.max_capacity = max_capacity
 
-    def append(self, dataset: MyDataset):
-        self.buffer += dataset
+    def __len__(self) -> int:
+        return len(self.buffer.data)
 
-    def create_loader(self, batch_size: int = 32, shuffle: bool = True):
-        return DataLoader(self.buffer, batch_size=batch_size, shuffle=shuffle)
+    def append(self, dataset: TestingDataset):
+        if self.type == "full":
+            self.buffer += dataset
+        elif self.type == "fixed":
+            old = copy.deepcopy(self.buffer)
+            self.buffer = copy.deepcopy(dataset) + old.subset(
+                torch.randperm(len(old))[: self.max_capacity - len(dataset)]
+            )
+            del old
+        elif self.type == "classes":
+            # old = copy.deepcopy(self.buffer)
+            # new = copy.deepcopy(dataset)
 
+            # current_counts = torch.tensor(dataset.get_labels()).bincount()
 
-class FixedSizeBuffer:
-    def __init__(self, max_size: int = 512, classes: bool | int = False) -> None:
-        self.buffer = MyDataset({})
-        self.max_size = max_size
-        self.classes = classes
+            # print(current_counts)
+            new = copy.deepcopy(dataset)
+            old = copy.deepcopy(self.buffer)
 
-    def append(self, dataset: MyDataset):
-        if self.classes == False:
-            new_buffer = copy.deepcopy(dataset)
-            indices = torch.randperm(len(self.buffer))[: self.max_size - len(dataset)]
-            subset = self.buffer.subset(indices)
-            new_buffer += subset
-            self.buffer = new_buffer
-        else:
-            current_buffer = copy.deepcopy(dataset)
+            # idx in old
+            old_idx = list(range(len(old)))
+            old_labels = old.get_labels()
 
-            # get_class idx in current buffer
-            all_idx = list(range(len(self.buffer)))
-            c_idx = {}
-            for c in range(self.classes):
-                c_idx[c] = []
-
-            if len(self.buffer) != 0:
-                for idx, d in enumerate(self.buffer):
-                    c_idx[d["labels"].item()].append(idx)
-
-            for c in range(self.classes):
-                shuffle(c_idx[c])
+            # label counts in new
+            label_indices = {k: [] for k in range(self.num_classes)}
+            for idx, label in enumerate(old_labels):
+                label_indices[label] = label_indices.get(label, []) + [idx]
+            label_indices = dict(sorted(label_indices.items()))
 
             # calculate number of instances to be added
-            counts = current_buffer.label_counts()
+            counts = torch.tensor(new.get_labels()).bincount()
             proba = counts / counts.sum()
+            reversed_proba = 1 / proba
+            print(proba, reversed_proba)
+            self.buffer = new
 
-            need = (self.max_size / self.classes) * torch.ones(counts.shape) - counts
-            available = torch.tensor([len(item) for item in c_idx.values()])
-            added = torch.min(need, available)
-            rest = available - added
-            missing = self.max_size - (added.sum().item() + counts.sum().item())
-
-            added_idx = []
-            for idx, num in enumerate(need):
-                indices = c_idx[idx][: num.int().item()]
-                added_idx += indices
-                current_buffer = current_buffer.__add__(self.buffer.subset(indices))
-
-            pad = list(set(all_idx) - set(added_idx))[0 : int(missing)]
-            if len(pad) > 0:
-                current_buffer = current_buffer.__add__(self.buffer.subset(pad))
-            self.buffer = current_buffer
-
-    def create_loader(self, batch_size: int = 32, shuffle: bool = True):
+    def get_dataloader(self, batch_size: int = 32, shuffle: bool = True):
         return DataLoader(self.buffer, batch_size=batch_size, shuffle=shuffle)
 
 
-# # Paths
-# CUR_DIR = os.path.abspath(os.curdir)
-# CACHE_DIR = "D:/odl_cache/.cache/"
-# SESSION_DIR = "D:/odl_cache/.cache/sessions_256/"
-# CONFIG_DIR = os.path.join(CUR_DIR, "./configs/")
-# LOG_DIR = "D:/model_zoo/odl/"
+def main():
+    DATASET_DIR = "D:/storage/odl/cache/online_session/reintel2020/"
+    buffer = Buffer(buffer_type="classes")
+    for file in os.listdir(DATASET_DIR):
+        print("Reading file: ", file)
+        cache = torch.load(os.path.join(DATASET_DIR, file))
+        train_dataset = cache["train"]
+        buffer.append(train_dataset)
+        print(len(train_dataset), len(buffer))
+        del cache
 
-# # Settings
-# NUM_SESSIONS = len(os.listdir(SESSION_DIR)) - 1
 
-
-# def main():
-#     for filename in os.listdir(CONFIG_DIR):
-#         config_name = filename.split(".")[0]
-#         log_dir = os.path.join(LOG_DIR, config_name)
-
-#         # load configs
-#         configs = read_config(os.path.join(CONFIG_DIR, filename))
-
-#         # memory buffer
-#         test_buffer = FullBuffer()  # to store all test data
-#         if configs.get("buffer") == "full":  # for full rehearsal
-#             buffer = FixedSizeBuffer(max_size=512, classes=2)
-#         else:
-#             buffer = None
-
-#         for session in range(NUM_SESSIONS):
-#             print(f"Session {session}")
-#             # load session data from cache
-#             cache = torch.load(os.path.join(SESSION_DIR, f"session_{session}.pt"))
-#             train_dict = cache.get("dataset")["train"]
-#             test_dict = cache.get("dataset")["test"]
-
-#             # create dataset
-#             train_dataset = MyDataset(train_dict)
-#             test_dataset = MyDataset(test_dict)
-#             test_dataset, eval_dataset = test_dataset.split(shuffle=False)
-
-#             # create train_loader
-#             if buffer:
-#                 buffer.append(train_dataset)
-           
+if __name__ == "__main__":
+    main()

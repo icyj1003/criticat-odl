@@ -2,24 +2,27 @@
   // Define model name here
   "name": "default",
 
-  // Define model type here
+  // Define model type: ensemble, text, image, metadate, user_embedding
   "type": "text",
 
-  // Buffer type: none, full, classes
-  "buffer": "fixed",
+
+  // Replay buffer type: none, full, fixed, classes
+  "buffer": "none",
+
+  // Size of the replay buffer if "buffer" is set to "fixed or classes"
   "buffer_size": 64,
 
   // Define learning rate here
   "learning_rate": 0.0001,
 
-  // Define epoch here
+  // Define number of epochs here
   "num_epochs": 50,
 
   // Define train_batch_size here
   "train_batch_size": 64,
 
   // Define eval_batch_size here
-  "eval_batch_size": 64,
+  "dev_batch_size": 64,
 
   // Define test_batch_size here
   "test_batch_size": 64,
@@ -27,10 +30,13 @@
   // Text model
   "text_model": {
     "architecture": "bilstm",
+    // bert, train
     "feature_extractor": "train",
-    "embedding_dim": 100,
+
+    // if use bert, "embedding_dim" is set to 768
+    "embedding_dim": 300,
+
     "hidden_dim": 128,
-    "use_pretrain_embedding": false,
     "max_features": 100000,
     "dropout_rate": 0.5
   },

@@ -1,7 +1,7 @@
 from typing import *
 
 import torch
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
 
 class Metric:
@@ -31,39 +31,42 @@ class MeanMetric(Metric):
         self.__init__()
 
 
-class MeanAccuracy(MeanMetric):
+class Compose(MeanMetric):
     def __init__(self):
-        super(MeanAccuracy, self).__init__()
+        super(Compose, self).__init__
+        self.metrics = {
+            "accuracy": MeanMetric(),
+            "f1-macro": MeanMetric(),
+            "recall-macro": MeanMetric(),
+            "precision-macro": MeanMetric(),
+        }
 
-    def update(self, y_true, y_pred, weight=1):
-        self.total += accuracy_score(y_true=y_true, y_pred=y_pred) * weight
-        self.weights.append(weight)
-
-    def result(self):
-        return self.total / sum(self.weights)
-
-
-class MeanF1Score(MeanMetric):
-    def __init__(
+    def update(
         self,
-        average: Literal["micro", "macro", "samples", "weighted", "binary"]
-        | None = "binary",
+        dict_metrics,
+        normalize={
+            "accuracy": 1,
+            "f1-macro": 1,
+            "recall-macro": 1,
+            "precision-macro": 1,
+        },
+        weight=1,
     ):
-        super(MeanF1Score, self).__init__()
-        self.average = average
-
-    def update(self, y_true, y_pred, weight=1):
-        self.total += (
-            f1_score(y_true=y_true, y_pred=y_pred, average=self.average) * weight
-        )
-        self.weights.append(weight)
+        for k in dict_metrics.keys():
+            self.metrics[k].update(dict_metrics[k] / normalize[k], weight)
 
     def result(self):
-        return self.total / sum(self.weights)
+        return {k: v.result() for k, v in self.metrics.items()}
+
+    def reset(self):
+        for k, v in self.metrics.items():
+            v.reset()
 
 
-if __name__ == "__main__":
-    mean = MeanMetric()
-    for i in range(100):
-        mean.update(i)
-        print(mean.result(), mean.total, mean.weights)
+def compute_metrics(y_true, y_pred):
+    return {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "f1-macro": f1_score(y_true, y_pred, average="macro"),
+        "recall-macro": recall_score(y_true, y_pred, average="macro"),
+        "precision-macro": precision_score(y_true, y_pred, average="macro"),
+    }

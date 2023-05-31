@@ -1,13 +1,66 @@
 import os
-import py_vncorenlp
-import emoji
-from underthesea import text_normalize
 import re
-from typing import List
 import warnings
-from tqdm.auto import tqdm
+from typing import List
+
+import emoji
+import py_vncorenlp
 
 warnings.filterwarnings("ignore")
+
+dict_map = {
+    "òa": "oà",
+    "Òa": "Oà",
+    "ÒA": "OÀ",
+    "óa": "oá",
+    "Óa": "Oá",
+    "ÓA": "OÁ",
+    "ỏa": "oả",
+    "Ỏa": "Oả",
+    "ỎA": "OẢ",
+    "õa": "oã",
+    "Õa": "Oã",
+    "ÕA": "OÃ",
+    "ọa": "oạ",
+    "Ọa": "Oạ",
+    "ỌA": "OẠ",
+    "òe": "oè",
+    "Òe": "Oè",
+    "ÒE": "OÈ",
+    "óe": "oé",
+    "Óe": "Oé",
+    "ÓE": "OÉ",
+    "ỏe": "oẻ",
+    "Ỏe": "Oẻ",
+    "ỎE": "OẺ",
+    "õe": "oẽ",
+    "Õe": "Oẽ",
+    "ÕE": "OẼ",
+    "ọe": "oẹ",
+    "Ọe": "Oẹ",
+    "ỌE": "OẸ",
+    "ùy": "uỳ",
+    "Ùy": "Uỳ",
+    "ÙY": "UỲ",
+    "úy": "uý",
+    "Úy": "Uý",
+    "ÚY": "UÝ",
+    "ủy": "uỷ",
+    "Ủy": "Uỷ",
+    "ỦY": "UỶ",
+    "ũy": "uỹ",
+    "Ũy": "Uỹ",
+    "ŨY": "UỸ",
+    "ụy": "uỵ",
+    "Ụy": "Uỵ",
+    "ỤY": "UỴ",
+}
+
+
+def replace_all(text, dict_map):
+    for i, j in dict_map.items():
+        text = text.replace(i, j)
+    return text
 
 
 class Segmenter(py_vncorenlp.VnCoreNLP):
@@ -50,7 +103,6 @@ class VietnameseTextCleaner:
             self.stopwords = f.read().split()
         except Exception as e:
             print(e)
-            print(stopwords_path)
         finally:
             if f is not None:
                 f.close()
@@ -58,78 +110,36 @@ class VietnameseTextCleaner:
         self.segmenter = Segmenter(save_dir=vncorenlp_path, cur_dir=cur_dir)
 
     def remove_emoji(self, text: str) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-
-        Returns:
-            str: _description_
-        """
         return emoji.replace_emoji(text, replace="")
 
-    def normalize(self, text: str) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-
-        Returns:
-            str: _description_
-        """
-        return text_normalize(text)
-
     def remove_spaces(self, text: str) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-
-        Returns:
-            str: _description_
-        """
         return re.sub(" +", " ", text)
 
     def remove_urls(self, text: str) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-
-        Returns:
-            str: _description_
-        """
         return re.sub(r"\s*https?://\S+(\s+|$)", "", text).strip()
 
     def remove_stopwords(self, text: str) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-
-        Returns:
-            str: _description_
-        """
         return " ".join(
             [token for token in text.split() if token not in self.stopwords]
         )
 
     def clean_one(self, text: str, astokens=False, dash=True) -> str:
-        """_summary_
-
-        Args:
-            text (str): _description_
-            astokens (bool, optional): _description_. Defaults to False.
-            dash (bool, optional): _description_. Defaults to True.
-
-        Returns:
-            str: _description_
-        """
         try:
+            # lower text
             text = str(text).lower()
-            text = self.normalize(text)
+
+            # normalize Vietnamese
+            text = replace_all(text, dict_map)
+
+            # remove emojis
             text = self.remove_emoji(text)
+
+            # remove url
             text = self.remove_urls(text)
+
+            # remove punctuation
+            text = re.sub(r"[^\w\s<>]", "", text)
+
             if dash:
                 text = self.segmenter(text)
             text = self.remove_stopwords(text)
@@ -142,27 +152,4 @@ class VietnameseTextCleaner:
             print(text, e, type(text), str(text))
 
     def clean_many(self, texts: List, astokens=False, dash=True) -> List:
-        """_summary_
-
-        Args:
-            texts (List): _description_
-            astokens (bool, optional): _description_. Defaults to False.
-            dash (bool, optional): _description_. Defaults to True.
-
-        Returns:
-            List: _description_
-        """
-        return [
-            self.clean_one(text, astokens=astokens, dash=True) for text in tqdm(texts)
-        ]
-
-
-class SimpleTextCleaner:
-    def __init__(self) -> None:
-        self.tokenizer = lambda x: x.split()
-
-    def clean_one(self, text):
-        return self.tokenizer(re.match(r"[a-z, ]*", text.lower())[0])
-
-    def clean_many(self, texts):
-        return [self.clean_one(text) for text in texts]
+        return [self.clean_one(text, astokens=astokens, dash=True) for text in texts]

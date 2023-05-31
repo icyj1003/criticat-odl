@@ -5,7 +5,7 @@ import os
 import torch.nn as nn
 import torch.optim as optim
 from preprocess import TextCleaner
-from cusdataset import TextDatasetForClassification
+from customdataset import TextDatasetForClassification
 from trainer import Trainer
 
 CUR_PATH = os.path.abspath(os.curdir)

@@ -1,17 +1,30 @@
 import datetime
 import json
 import os
-from pathlib import Path
+import random
 from typing import *
 
+import numpy as np
 import torch
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import *
 
 from metrics import MeanMetric
 from module import *
 from preprocess import VietnameseTextCleaner
-from transforms import TextTransform
-from vocabulary import Vocabulary
+
+
+def ensure_dir_exists(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+
+def set_all_seeds(seed):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
 
 
 def to_number(object):
@@ -35,7 +48,7 @@ def dict_handler(
     data["num_share_post"] = to_number(data["num_share_post"])
     data["num_like_post"] = to_number(data["num_like_post"])
     data["num_comment_post"] = to_number(data["num_comment_post"])
-    data["raw_length"] = len(str(data["post_message"]))
+    data["raw_length"] = len(str(data["post_message"]).split())
     data["post_message"] = cleaner.clean_one(data["post_message"])
     return data
 
@@ -146,29 +159,6 @@ def eval_epoch(model, criterion, loader, device, configs):
     return epoch_loss.result(), acc, y_true, y_pred
 
 
-def handling_text(
-    texts: Iterable, vocab: Vocabulary, train: bool = True
-) -> torch.Tensor:
-    tokenizer = lambda x: [_.split() for _ in x]
-    text_transform = TextTransform(max_length=20)
-    texts = tokenizer(texts)
-    if train:
-        # update token to vocab
-        vocab.append_from_iterator(texts)
-    # token -> index -> padding -> tensor -> batch
-    texts = torch.stack([text_transform(vocab.get_idxs(tokens)) for tokens in texts])
-    return texts
-
-
-def handling_username(
-    usernames: Iterable, LUT: Vocabulary, train: bool = True
-) -> torch.Tensor:
-    if train:
-        LUT.append_tokens(usernames)
-    # username -> index
-    return torch.stack([torch.tensor(LUT[user]) for user in usernames])
-
-
 def handling_metadata(
     num_like_post: Iterable,
     num_comment_post: Iterable,
@@ -201,97 +191,97 @@ def handling_metadata(
     ).log()
 
 
-def load_model_from_config(configs):
-    # text model
-    if configs["type"] == "ensemble" or configs["type"] == "text":
-        if configs["text_model"]["architecture"] == "lstm":
-            text_model = LSTMClassifier(
-                embedding_dim=configs["text_model"].get("embedding_dim"),
-                hidden_dim=configs["text_model"].get("hidden_dim"),
-                vocab_size=configs["text_model"].get("max_features"),
-                dropout_rate=configs["text_model"].get("dropout_rate"),
-                use_pretrain_embedding=configs["text_model"].get(
-                    "use_pretrain_embedding"
-                ),
-            )
-        elif configs["text_model"]["architecture"] == "gru":
-            text_model = GRUClassifier(
-                embedding_dim=configs["text_model"].get("embedding_dim"),
-                hidden_dim=configs["text_model"].get("hidden_dim"),
-                vocab_size=configs["text_model"].get("max_features"),
-                dropout_rate=configs["text_model"].get("dropout_rate"),
-                use_pretrain_embedding=configs["text_model"].get(
-                    "use_pretrain_embedding"
-                ),
-            )
-        elif configs["text_model"]["architecture"] == "bilstm":
-            text_model = LSTMClassifier(
-                embedding_dim=configs["text_model"].get("embedding_dim"),
-                hidden_dim=configs["text_model"].get("hidden_dim"),
-                vocab_size=configs["text_model"].get("max_features"),
-                dropout_rate=configs["text_model"].get("dropout_rate"),
-                bidirectional=True,
-                use_pretrain_embedding=configs["text_model"].get(
-                    "use_pretrain_embedding"
-                ),
-            )
-        elif configs["text_model"]["architecture"] == "bigru":
-            text_model = GRUClassifier(
-                embedding_dim=configs["text_model"].get("embedding_dim"),
-                hidden_dim=configs["text_model"].get("hidden_dim"),
-                vocab_size=configs["text_model"].get("max_features"),
-                dropout_rate=configs["text_model"].get("dropout_rate"),
-                bidirectional=True,
-                use_pretrain_embedding=configs["text_model"].get(
-                    "use_pretrain_embedding"
-                ),
-            )
-        else:
-            raise Exception("Unknown text model architecture!")
-    if configs["type"] == "ensemble" or configs["type"] == "image":
-        if configs["image_model"]["architecture"] == "resnet18":
-            image_model = Resnet18()
-        elif configs["image_model"]["architecture"] == "resnet34":
-            image_model = Resnet34()
-        else:
-            raise Exception("Unknown image model architecture!")
+# def load_model_from_config(configs):
+#     # text model
+#     if configs["type"] == "ensemble" or configs["type"] == "text":
+#         if configs["text_model"]["architecture"] == "lstm":
+#             text_model = LSTMClassifier(
+#                 embedding_dim=configs["text_model"].get("embedding_dim"),
+#                 hidden_dim=configs["text_model"].get("hidden_dim"),
+#                 vocab_size=configs["text_model"].get("max_features"),
+#                 dropout_rate=configs["text_model"].get("dropout_rate"),
+#                 use_pretrain_embedding=False
+#                 if configs["text_model"].get("feature_extractor") == "train"
+#                 else True,
+#             )
+#         elif configs["text_model"]["architecture"] == "gru":
+#             text_model = GRUClassifier(
+#                 embedding_dim=configs["text_model"].get("embedding_dim"),
+#                 hidden_dim=configs["text_model"].get("hidden_dim"),
+#                 vocab_size=configs["text_model"].get("max_features"),
+#                 dropout_rate=configs["text_model"].get("dropout_rate"),
+#                 use_pretrain_embedding=False
+#                 if configs["text_model"].get("feature_extractor") == "train"
+#                 else True,
+#             )
+#         elif configs["text_model"]["architecture"] == "bilstm":
+#             text_model = LSTMClassifier(
+#                 embedding_dim=configs["text_model"].get("embedding_dim"),
+#                 hidden_dim=configs["text_model"].get("hidden_dim"),
+#                 vocab_size=configs["text_model"].get("max_features"),
+#                 dropout_rate=configs["text_model"].get("dropout_rate"),
+#                 bidirectional=True,
+#                 use_pretrain_embedding=False
+#                 if configs["text_model"].get("feature_extractor") == "train"
+#                 else True,
+#             )
+#         elif configs["text_model"]["architecture"] == "bigru":
+#             text_model = GRUClassifier(
+#                 embedding_dim=configs["text_model"].get("embedding_dim"),
+#                 hidden_dim=configs["text_model"].get("hidden_dim"),
+#                 vocab_size=configs["text_model"].get("max_features"),
+#                 dropout_rate=configs["text_model"].get("dropout_rate"),
+#                 bidirectional=True,
+#                 use_pretrain_embedding=False
+#                 if configs["text_model"].get("feature_extractor") == "train"
+#                 else True,
+#             )
+#         else:
+#             raise Exception("Unknown text model architecture!")
+#     if configs["type"] == "ensemble" or configs["type"] == "image":
+#         if configs["image_model"]["architecture"] == "resnet18":
+#             image_model = Resnet18()
+#         elif configs["image_model"]["architecture"] == "resnet34":
+#             image_model = Resnet34()
+#         else:
+#             raise Exception("Unknown image model architecture!")
 
-    if configs["type"] == "ensemble" or configs["type"] == "metadata":
-        metadata_model = Metadata(
-            input_size=6, hidden_size=configs["metadata_model"].get("hidden_size")
-        )
-    if configs["type"] == "ensemble" or configs["type"] == "user_name":
-        user_model = UserEmbedding(
-            max_num_user=configs["user_model"].get("max_user"),
-            embedding_dim=configs["user_model"].get("embedding_dim"),
-            dropout_rate=configs["user_model"].get("dropout_rate"),
-        )
-    if configs["type"] == "ensemble":
-        model = Ensemble(
-            text_model=text_model,
-            image_model=image_model,
-            user_model=user_model,
-            metadata_model=metadata_model,
-        )
-        return model
-    elif configs["type"] == "text":
-        return text_model
-    elif configs["type"] == "image":
-        return image_model
-    elif configs["type"] == "metadata":
-        return metadata_model
-    elif configs["type"] == "user_name":
-        return user_model
+#     if configs["type"] == "ensemble" or configs["type"] == "metadata":
+#         metadata_model = Metadata(
+#             input_size=6, hidden_size=configs["metadata_model"].get("hidden_size")
+#         )
+#     if configs["type"] == "ensemble" or configs["type"] == "user_name":
+#         user_model = UserEmbedding(
+#             max_num_user=configs["user_model"].get("max_user"),
+#             embedding_dim=configs["user_model"].get("embedding_dim"),
+#             dropout_rate=configs["user_model"].get("dropout_rate"),
+#         )
+#     if configs["type"] == "ensemble":
+#         model = Ensemble(
+#             text_model=text_model,
+#             image_model=image_model,
+#             user_model=user_model,
+#             metadata_model=metadata_model,
+#         )
+#         return model
+#     elif configs["type"] == "text":
+#         return text_model
+#     elif configs["type"] == "image":
+#         return image_model
+#     elif configs["type"] == "metadata":
+#         return metadata_model
+#     elif configs["type"] == "user_name":
+#         return user_model
 
 
-def save_object(object, dir, filename=None, mode: Literal["pt", "jsonc"] = "pt"):
-    # ensure dir exists
-    Path(dir).mkdir(parents=True, exist_ok=True)
+# def save_object(object, dir, filename=None, mode: Literal["pt", "jsonc"] = "pt"):
+#     # ensure dir exists
+#     Path(dir).mkdir(parents=True, exist_ok=True)
 
-    # save object
-    if mode == "pt":
-        torch.save(object, os.path.join(dir, f"{filename}.pt"))
-    elif mode == "jsonc":
-        assert type(object) is dict, "type must be dict when saving as jsonc"
-        with open(os.path.join(dir, f"{filename}.jsonc"), "w") as outfile:
-            json.dump(object, outfile)
+#     # save object
+#     if mode == "pt":
+#         torch.save(object, os.path.join(dir, f"{filename}.pt"))
+#     elif mode == "jsonc":
+#         assert type(object) is dict, "type must be dict when saving as jsonc"
+#         with open(os.path.join(dir, f"{filename}.jsonc"), "w") as outfile:
+#             json.dump(object, outfile)
