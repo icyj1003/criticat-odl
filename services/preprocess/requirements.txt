@@ -1,0 +1,5 @@
+gensim
+emoji
+py_vncorenlp
+underthesea
+bytewax

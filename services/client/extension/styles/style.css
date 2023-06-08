@@ -1,0 +1,56 @@
+.row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+}
+
+.unreliable {
+  font-family: Roboto, sans-serif;
+  font-weight: bold;
+  font-size: 14px;
+  width: 40%;
+  background-color: #fff;
+  color: #cc0070;
+  padding: 10px 30px;
+  border: 2px solid #cc0070;
+  box-shadow: rgb(0, 0, 0) 0px 0px 0px 0px;
+  border-radius: 8px;
+  transition: 500ms;
+  transform: translateY(0);
+  cursor: pointer;
+}
+
+.unreliable:hover {
+
+  transition: 500ms;
+  transform: translateY(-0px);
+  color: #fff;
+  background-color: #cc0070;
+  border: solid 2px #cc0070;
+}
+
+.reliable {
+  font-family: Roboto, sans-serif;
+  font-weight: bold;
+  width: 40%;
+  font-size: 14px;
+  background-color: #fff;
+  color: #00cc44;
+  padding: 10px 30px;
+  border: 2px solid #00cc44;
+  box-shadow: rgb(0, 0, 0) 0px 0px 0px 0px;
+  border-radius: 8px;
+  transition: 500ms;
+  transform: translateY(0);
+  cursor: pointer;
+}
+
+.reliable:hover {
+  transition: 500ms;
+  transform: translateY(-0px);
+  background-color: #fff;
+  color: #00cc44;
+  color: #fff;
+  background-color: #00cc44;
+  border: solid 2px #00cc44;
+}

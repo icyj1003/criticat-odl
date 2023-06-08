@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "CritiCat",
+  "version": "1.0",
+  "description": "CritiCat is the purr-fect tool for anyone who wants to stay informed and avoid fake news on Facebook. With its powerful machine learning algorithms, CritiCat predicts the credibility of Facebook posts in real-time, allowing you to quickly determine which posts are trustworthy and which ones to avoid. Whether you're a concerned citizen looking to stay informed or a researcher looking for accurate data, CritiCat is the ideal companion for you. With CritiCat, you can effortlessly collect and rate Facebook posts with their credibility, helping you stay up-to-date and make informed decisions in real-time. So why wait? Download CritiCat now and start protecting yourself from fake news today!",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "js": ["scripts/content.js"],
+      "css": ["styles/style.css"],
+      "matches": ["https://m.facebook.com/*"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "permissions": ["tabs", "webNavigation", "scripting"],
+  "host_permissions": ["https://m.facebook.com/*"]
+}
